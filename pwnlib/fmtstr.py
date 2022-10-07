@@ -293,17 +293,23 @@ def make_atoms_simple(address, data, badbytes=frozenset()):
     if not badbytes:
         return [AtomWrite(address + i, 1, d) for i, d in enumerate(data)]
 
-    if any(x in badbytes for x in pack(address)):
+    if any(x in badbytes for x in pack(address)) or b'%' in badbytes or b'n' in badbytes:
         raise RuntimeError("impossible to avoid a bad byte in starting address %x" % address)
+
+    specifier = {}
+    for key, value in SPECIFIER.items():
+        if not any(x in badbytes for x in value.encode()):
+            specifier[key] = value
 
     i = 0
     out = []
+    # ToDo: to avoid specific specifier, try to get a longest Atom at once
     while i < len(data):
         candidate = AtomWrite(address + i, 1, data[i])
         while i + candidate.size < len(data) and any(x in badbytes for x in pack(candidate.end)):
             candidate = candidate.union(AtomWrite(candidate.end, 1, data[i + candidate.size]))
 
-        sz = min([s for s in SPECIFIER if s >= candidate.size] + [float("inf")])
+        sz = min([s for s in specifier if s >= candidate.size] + [float("inf")])
         if i + sz > len(data):
             raise RuntimeError("impossible to avoid badbytes starting after offset %d (address %x)" % (i, i + address))
         i += candidate.size
